@@ -1,0 +1,8 @@
+pyTelegramBotAPI
+telebot
+python-docx
+sentence_transformers
+numpy
+scikit-learn
+einops
+requests
