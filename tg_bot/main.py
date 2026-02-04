@@ -8,6 +8,8 @@ import logging
 
 from cv_matcher import VacancyResumeMatcher
 
+from extract_skills import extract_skills
+from ranking import skill_similarity
 
 logger = telebot.logger
 
@@ -45,6 +47,11 @@ TOKEN = os.environ.get("iconi_bot_token")
 bot = telebot.TeleBot(TOKEN, parse_mode='HTML')
 
 FIND_VACANCIES = "Find vacancies"
+SHOW_MATCH = "Show match"
+
+ACTIVE_STATE_INIT = {'mode': FIND_VACANCIES, 'id': None}
+ACTIVE_STATE = {}
+
 
 def read_docx(message, docx_file):
     try:
@@ -73,11 +80,17 @@ def handle_admin(message):
 def gen_main_menu():
     markup = ReplyKeyboardMarkup(True, False)
     markup.add(KeyboardButton(FIND_VACANCIES))
+    markup.add(KeyboardButton(SHOW_MATCH))
     return markup
+
+def get_active_state(user_id):
+    return ACTIVE_STATE.get(user_id, ACTIVE_STATE_INIT)
 
 # Handle '/cancel'
 @bot.message_handler(commands=['cancel'])
 def send_cancel(message):
+    get_active_state(message.from_user.id)['mode'] = FIND_VACANCIES
+    get_active_state(message.from_user.id)['id'] = None
     markup = ReplyKeyboardRemove()
     msg = bot.send_message(message.from_user.id, f"""\
         Отмена \
@@ -89,13 +102,25 @@ def send_welcome(message):
     msg = bot.send_message(message.from_user.id, f"""\
         Привет, <i>{message.from_user.first_name}</i>. Я HRBot. \
         \n\nЯ помогу тебе с поиском вакансий. \
-        \n\nЖмите на кнопку {FIND_VACANCIES}. \
+        \n\nЖми на кнопку {FIND_VACANCIES} чтобы подобрать топ-{RANK} вакансий по резюме, \
+        \n\nили {SHOW_MATCH} чтобы посмотреть совпадения по конкретной вакансии. \
         \n\nПомощь /help. \
         """, reply_markup=gen_main_menu())
 
+@bot.message_handler(func=lambda message: message.text == SHOW_MATCH)
+def process_ask_question_match(message):
+    get_active_state(message.from_user.id)['mode'] = SHOW_MATCH
+    vacs_text = ""
+    for vac_id, vac in vacancies.items():
+        vacs_text += f"\n\n{vac_id}. {vac['title']}"
+    
+    msg = bot.send_message(message.from_user.id, f"""\
+        \n\nВыбери вакансию, отправь мне только ее номер {vacs_text}  \
+        """)
+
 @bot.message_handler(func=lambda message: message.text == FIND_VACANCIES)
 def process_ask_question(message):
-    
+    get_active_state(message.from_user.id)['mode'] = FIND_VACANCIES
     msg = bot.send_message(message.from_user.id, f"""\
         \n\nПришли мне docx файл резюме или краткий текст резюме одним сообщением \
         """)
@@ -106,7 +131,8 @@ def send_help(message):
     msg = bot.send_message(message.from_user.id, f"""\
         Привет, <i>{message.from_user.first_name}</i>. Я HRBot. \
         \n\nЯ помогу тебе с поиском вакансий. \
-        \n\nЖмите на кнопку {FIND_VACANCIES}. \        
+        \n\nЖми на кнопку {FIND_VACANCIES} чтобы подобрать топ-{RANK} вакансий по резюме, \
+        \n\nили {SHOW_MATCH} чтобы посмотреть совпадения по конкретной вакансии. \       
         """, reply_markup=gen_main_menu())
 
 
@@ -144,9 +170,14 @@ def handle_document(message):
                 
                 bot.reply_to(message, f"Получил файл, проверяю...")
                 
-                
-                result = get_ranks(cv_id, resume_text)
-                build_answer(message, result, resume_text)
+                state = get_active_state(message.from_user.id)
+                if state['mode'] == FIND_VACANCIES:
+                    result = get_ranks(cv_id, resume_text)
+                    build_answer(message, result, resume_text)
+                elif state['mode'] == SHOW_MATCH and state['id']:
+                    show_match(message, resume_text)
+                else:
+                    bot.reply_to(message, 'Что-то пошло не так. Попробуйте еще раз.')
             else:
                 bot.reply_to(message, 'Что-то пошло не так. Попробуйте еще раз.')
         except Exception as e:
@@ -156,8 +187,41 @@ def handle_document(message):
         bot.reply_to(message, 'Только .docx файлы.')
 
 def answer(message):
-    result = get_ranks(1, message.text)
-    build_answer(message, result, message.text)
+    state = get_active_state(message.from_user.id)
+    if state['mode'] == FIND_VACANCIES:
+        result = get_ranks(1, message.text)
+        build_answer(message, result, message.text)
+    elif state['mode'] == SHOW_MATCH and str.isdigit(message.text) and int(message.text) in vacancies.keys():
+        state['id'] = int(message.text)
+        bot.send_message(message.from_user.id, f"""\
+            \n\nВыбрана вакансия {state['id']}. Теперь пришли мне docx файл резюме или краткий текст резюме одним сообщением \
+            """)
+    elif state['mode'] == SHOW_MATCH and not str.isdigit(message.text) and state['id']:
+        bot.reply_to(message, f"Выбраная вакансия {state['id']}. Получил резюме, проверяю...")
+        show_match(message, message.text)
+    else: 
+        bot.reply_to(message, 'Что-то пошло не так. Попробуйте еще раз.')
+
+def show_match(message, resume_text):
+    vac_id = get_active_state(message.from_user.id)['id']
+    vacancy = vacancies[vac_id]
+
+    vac_skills = extract_skills(vacancy['description'])
+
+    resume_skills = extract_skills(resume_text)
+
+    similarity = skill_similarity(resume_skills, vac_skills)
+
+    resp = f"""
+        \nПроцент соответствия навыков: {similarity * 100:.2f}%
+        \nИзвлечённые навыки из резюме: {[formatted(s, vac_skills) for s in resume_skills]}
+        \nНавыки вакансии: {[formatted(s, resume_skills) for s in vac_skills]}
+        """
+
+    bot.reply_to(message, resp)
+    
+def formatted(skill, skills):
+    return f"<b>{skill}</b>" if skill in skills else skill
 
 def build_answer(message, result, resume_text):
     bot.reply_to(message, f'Топ-{RANK} рекомендуемых вакансий:')
