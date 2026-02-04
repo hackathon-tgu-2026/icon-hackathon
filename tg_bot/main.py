@@ -1,3 +1,8 @@
+# ==========================================
+# File: main.py
+# Description: TG bot for analise CV and vacancies
+# Author: @koleslena
+# ==========================================
 import os
 import requests
 
