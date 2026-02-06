@@ -6,6 +6,9 @@
 import os
 import requests
 
+from docx import Document
+from io import BytesIO
+
 import telebot
 from telebot.types import ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardRemove, KeyboardButton
 import datetime
@@ -171,7 +174,20 @@ def handle_document(message):
                         f.write(response.content)
                     cv_id, resume_text = read_docx(message, save_path)
                 else:
-                    cv_id, resume_text = file_id, response.text
+                    docx_content = BytesIO(response.content)
+
+                    # Open the document using python-docx
+                    document = Document(docx_content)
+
+                    # Extract all text, paragraph by paragraph
+                    full_text = []
+                    for paragraph in document.paragraphs:
+                        full_text.append(paragraph.text)
+
+                    # Join the paragraphs with newlines
+                    extracted_text = '\n'.join(full_text)
+
+                    cv_id, resume_text = file_id, extracted_text
                 
                 bot.reply_to(message, f"Получил файл, проверяю...")
                 
