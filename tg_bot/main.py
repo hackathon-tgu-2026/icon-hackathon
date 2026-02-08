@@ -63,27 +63,20 @@ ACTIVE_STATE = {}
 
 def read_docx(message, docx_file):
     try:
-        cv_id = int(docx_file.stem)
         text = cv_matcher.extract_text_from_docx(str(docx_file))
-        if text.strip():
-            print(f"✓ Загружено резюме {cv_id}")
-            return cv_id, text
+        print(f"✓ Загружено резюме")
+        return text.strip() if text else text
     except ValueError:
         msg = bot.send_message(message, 'Что-то пошло не так. Попробуйте еще раз.')
 
-def get_ranks(cv_id, resume_text):
-    resume_embedding = cv_matcher.encode_texts(resume_text)
+def get_ranks(resume_text):
+    resume_embedding = cv_matcher.encode_texts([resume_text])
     
     # Ранжируем вакансии для этого резюме
     ranked = cv_matcher.rank_vacancies_for_resume(resume_text, vacancies, 
-                                                  vacancy_embeddings, resume_embedding)
+                                                  vacancy_embeddings, resume_embedding[0])
 
     return ranked[:RANK]
-
-# Handle '/admin'
-@bot.message_handler(commands=['admin'])
-def handle_admin(message):
-    pass
 
 def gen_main_menu():
     markup = ReplyKeyboardMarkup(True, False)
@@ -144,13 +137,6 @@ def send_help(message):
         """, reply_markup=gen_main_menu())
 
 
-@bot.callback_query_handler(func=lambda call: True)
-def callback_query(call):
-    try:
-        pass
-    except:
-        msg = bot.send_message(call.from_user.id, 'Что-то пошло не так. Попробуйте еще раз.')
-
 @bot.message_handler(content_types=['document'])
 def handle_document(message):
     if message.document.file_name.endswith('.docx'):
@@ -172,7 +158,7 @@ def handle_document(message):
                     save_path = os.path.join(DOWNLOAD_FOLDER, message.document.file_name)
                     with open(save_path, 'wb') as f:
                         f.write(response.content)
-                    cv_id, resume_text = read_docx(message, save_path)
+                    resume_text = read_docx(message, save_path)
                 else:
                     docx_content = BytesIO(response.content)
 
@@ -187,13 +173,13 @@ def handle_document(message):
                     # Join the paragraphs with newlines
                     extracted_text = '\n'.join(full_text)
 
-                    cv_id, resume_text = file_id, extracted_text
+                    resume_text = extracted_text
                 
                 bot.reply_to(message, f"Получил файл, проверяю...")
                 
                 state = get_active_state(message.from_user.id)
                 if state['mode'] == FIND_VACANCIES:
-                    result = get_ranks(cv_id, resume_text)
+                    result = get_ranks(resume_text)
                     build_answer(message, result, resume_text)
                 elif state['mode'] == SHOW_MATCH and state['id']:
                     show_match(message, resume_text)
@@ -210,7 +196,7 @@ def handle_document(message):
 def answer(message):
     state = get_active_state(message.from_user.id)
     if state['mode'] == FIND_VACANCIES:
-        result = get_ranks(1, message.text)
+        result = get_ranks(message.text)
         build_answer(message, result, message.text)
     elif state['mode'] == SHOW_MATCH and str.isdigit(message.text) and int(message.text) in vacancies.keys():
         state['id'] = int(message.text)
