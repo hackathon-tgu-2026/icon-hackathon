@@ -13,33 +13,32 @@ AI Resume Matcher — система интеллектуального подб
   * Spearman — корреляция между предсказанным и реальным порядком.
   * Поддержка DOCX и CSV форматов для резюме и вакансий.
 
----
 
 ## Установка
 
 1. Клонировать репозиторий:
-'''
+
 git clone https://github.com/hackathon-tgu-2026/icon-hackathon/tree/main/research_v2
 cd research_v2
-'''
+
 2. Создать и активировать виртуальное окружение (опционально):
-'''
+
 python -m venv venv
 source venv/bin/activate  # Linux / Mac
 venv\Scripts\activate     # Windows
-'''
+
 3. Установить зависимости:
-'''
+
 pip install -r requirements.txt
-'''
+
 ---
 
 ## Использование
 
 ### Запуск обучения и оценки модели
-'''
+
 python -m src.train_and_evaluate
-'''
+
 * Сценарий автоматически:
 
   * Загружает резюме и вакансии.
@@ -70,7 +69,9 @@ python -m src.train_and_evaluate
 
 AI-Resume-Matcher/
 ├─ src/
+
 │  ├─ train_and_evaluate.py   # Главный скрипт запуска
+
 │  ├─ preprocessing.py        # Загрузка и предобработка данных
 │  ├─ extract_skills.py       # Извлечение ключевых навыков
 │  ├─ ranking.py              # Логика ранжирования резюме
@@ -80,8 +81,10 @@ AI-Resume-Matcher/
 │  └─ 5_vacancies.csv          # Файл с вакансиями
 ├─ requirements.txt
 └─ README.md
+
 ---
 
 ## Цель проекта
+
 
 Помочь HR-специалистам быстро оценивать кандидатов и автоматически определять наиболее релевантные резюме по каждой вакансии, с прозрачной метрикой качества подбора.
